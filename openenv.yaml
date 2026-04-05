@@ -1,0 +1,13 @@
+name: medical_triage_env
+description: Medical triage decision-making environment
+
+entrypoint: server.medical_triage_env_environment:MedicalTriageEnv
+
+observation_model: models.Observation
+action_model: models.Action
+reward_model: models.Reward
+
+tasks:
+  - tasks.easy_task
+  - tasks.medium_task
+  - tasks.hard_task
