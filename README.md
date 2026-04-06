@@ -93,7 +93,7 @@ Mild / Moderate / Emergency
 git clone https://github.com/nish-debug15/openenv-agent.git
 cd openenv-agent
 
-pip install -r requirements.txt
+pip install -r server/requirements.txt
 python inference.py
 ```
 
