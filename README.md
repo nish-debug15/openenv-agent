@@ -6,15 +6,6 @@ colorTo: purple
 sdk: docker
 pinned: false
 ---
----
-
-title: Medical Triage OpenEnv
-emoji: 🏥
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
--------------
 
 # Medical Triage OpenEnv
 
