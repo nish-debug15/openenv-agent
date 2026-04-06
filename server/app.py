@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from medical_triage_env_environment import MedicalTriageEnv
+from server.medical_triage_env_environment import MedicalTriageEnv
 import uvicorn
 
 app = FastAPI()
