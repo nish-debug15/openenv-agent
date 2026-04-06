@@ -110,6 +110,7 @@ The baseline agent uses an LLM via Hugging Face router:
 
 ## Project Structure
 
+```text
 openenv-agent/
 ├── server/
 │   ├── app.py
@@ -127,7 +128,7 @@ openenv-agent/
 ├── openenv.yaml
 ├── pyproject.toml
 ├── README.md
-
+```
 ---
 
 ## Validation
