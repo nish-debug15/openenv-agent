@@ -1,27 +1,26 @@
 from fastapi import FastAPI
-import sys
-import os
-
-# Add parent directory to path so we can import models and env
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
 from medical_triage_env_environment import MedicalTriageEnv
-from models import Action
+import uvicorn
 
 app = FastAPI()
 env = MedicalTriageEnv()
 
-@app.get("/")
-def home():
-    return {"message": "Medical Triage OpenEnv Running"}
-
 @app.get("/reset")
-def reset(task: str = "easy"):
-    obs = env.reset(task)
+def reset_get():
+    obs = env.reset("easy")
     return obs.dict()
 
+@app.post("/reset")
+def reset_post():
+    obs = env.reset("easy")
+    return obs.dict()
+
+@app.get("/state")
+def state():
+    return env.state().dict()
+
 @app.post("/step")
-def step(action: Action):
+def step(action: dict):
     obs, reward, done, info = env.step(action)
     return {
         "observation": obs.dict(),
@@ -30,16 +29,12 @@ def step(action: Action):
         "info": info
     }
 
-@app.get("/state")
-def state():
-    return env.state()
+@app.get("/")
+def home():
+    return {"message": "Medical Triage OpenEnv Running"}
 
-
-# THIS PART IS REQUIRED FOR OPENENV VALIDATION
 def main():
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=7860)
-
+    uvicorn.run(app, host="0.0.0.0", port=7860)
 
 if __name__ == "__main__":
     main()
