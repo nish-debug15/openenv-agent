@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MedFlow-RL
 
 [![OpenEnv Compliant](https://img.shields.io/badge/OpenEnv-v1.0-blue)](https://github.com/raun/openenv)
@@ -203,3 +204,15 @@ openenv-agent/
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
+=======
+---
+title: Medical Triage Openenv
+emoji: 📈
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
+Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+>>>>>>> df0b37c534de991eb080b0e73ae8774f46690669
