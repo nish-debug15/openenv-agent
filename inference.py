@@ -43,7 +43,16 @@ for task in tasks:
             temperature=0
         )
 
-        prediction = response.choices[0].message.content.strip()
+        text = response.choices[0].message.content.lower()
+
+        # Extract severity from model output
+        if "emergency" in text:
+            prediction = "Emergency"
+        elif "moderate" in text:
+            prediction = "Moderate"
+        else:
+            prediction = "Mild"
+
         print("Model prediction:", prediction)
 
         action = Action(
@@ -57,10 +66,7 @@ for task in tasks:
     results[task] = total_score
     print("Score for", task, ":", total_score)
 
-print("\nFinal Results:")
-print(results)
+print("\nBaseline Scores:")
+for t, s in results.items():
+    print(t, ":", s)
 
-# run this before running the server to test inference
-#$env:API_BASE_URL="https://api-inference.huggingface.co/v1"
-#$env:MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.2"
-#$env:OPENAI_API_KEY="hf_your_new_token"*/

@@ -18,8 +18,9 @@ def medium_task():
 
 def hard_task():
     return {
-        "symptoms": ["headache"],
+        "symptoms": ["headache", "blurred vision"],
         "pain_level": 5,
         "age": 65,
-        "true_severity": "Moderate",
+        "correct_severity": "Emergency"
     }
+    
