@@ -7,7 +7,7 @@
 """Medical Triage Env Environment."""
 
 from .client import MedicalTriageEnv
-from .models import MedicalTriageAction, MedicalTriageObservation
+from .server.models import MedicalTriageAction, MedicalTriageObservation
 
 __all__ = [
     "MedicalTriageAction",

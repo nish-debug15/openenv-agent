@@ -1,4 +1,4 @@
-from models import Observation, Action, Reward
+from server.models import Observation, Action, Reward
 from tasks import easy_task, medium_task, hard_task
 from graders import grade
 

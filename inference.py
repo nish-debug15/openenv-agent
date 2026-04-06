@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 from server.medical_triage_env_environment import MedicalTriageEnv
-from models import Action
+from server.models import Action
 
 print("Starting inference...")
 
