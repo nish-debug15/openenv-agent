@@ -1,4 +1,4 @@
-FROM python:3.10.13-slim-bullseye
+FROM python:3.9-buster
 
 WORKDIR /app
 
@@ -6,9 +6,9 @@ COPY . .
 
 RUN pip install --upgrade pip
 
-RUN pip install --no-cache-dir fastapi uvicorn openai
+RUN pip install fastapi uvicorn openai
 
-RUN pip install --no-cache-dir -r server/requirements.txt || true
+RUN pip install -r server/requirements.txt || true
 
 ENV PORT=7860
 
