@@ -94,7 +94,8 @@ git clone https://github.com/nish-debug15/openenv-agent.git
 cd openenv-agent
 
 pip install -r server/requirements.txt
-python inference.py
+pip install fastapi uvicorn openai
+python -m server.app
 ```
 
 ---
@@ -103,7 +104,7 @@ python inference.py
 
 The baseline agent uses an LLM via Hugging Face router:
 
-* Model: `openai/gpt-oss-20b`
+* Model: `meta-llama/Llama-3.1-8B-Instruct` (via Hugging Face router)
 * Deterministic output (temperature = 0)
 
 ---
