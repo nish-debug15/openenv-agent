@@ -6,15 +6,24 @@ from graders import grade
 class MedicalTriageEnv:
 
     def __init__(self):
-        self.reset()
+        self._task_index = 0  
+        self.patient = None
+        self.steps = 0
+        self.done = False
 
-    def reset(self, task="easy"):
-        if task == "easy":
+    def reset(self):
+        task_cycle = ["easy", "medium", "hard"]
+        current_task = task_cycle[self._task_index % 3]
+
+        if current_task == "easy":
             self.patient = easy_task()
-        elif task == "medium":
+        elif current_task == "medium":
             self.patient = medium_task()
         else:
             self.patient = hard_task()
+
+
+        self._task_index += 1
 
         self.steps = 0
         self.done = False

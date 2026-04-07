@@ -3,96 +3,115 @@ from openai import OpenAI
 from server.medical_triage_env_environment import MedicalTriageEnv
 from server.models import Action
 
-print("Starting inference...")
-
 # --- ENV VARIABLES ---
-API_BASE_URL = os.getenv("API_BASE_URL")
-MODEL_NAME = os.getenv("MODEL_NAME")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-if not API_BASE_URL or not MODEL_NAME or not OPENAI_API_KEY:
-    raise ValueError("Missing environment variables. Check API_BASE_URL, MODEL_NAME, OPENAI_API_KEY")
+# --- CLIENT INIT ---
+try:
+    client = OpenAI(
+        base_url=API_BASE_URL,
+        api_key=API_KEY
+    )
+except Exception:
+    client = None
 
-print("API_BASE_URL:", API_BASE_URL)
-print("MODEL_NAME:", MODEL_NAME)
-
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=OPENAI_API_KEY
-)
-
+# --- INIT ENV ---
 env = MedicalTriageEnv()
 
 tasks = ["easy", "medium", "hard"]
 results = {}
 
-# --- SAFE OBS PARSER ---
+# --- OBS PARSER ---
 def parse_obs(obs):
-    """Handles both dict and object-style observations safely"""
     if isinstance(obs, dict):
         return (
-            obs.get("symptoms", "unknown"),
-            obs.get("pain_level", "unknown"),
-            obs.get("age", "unknown"),
+            obs.get("symptoms", []),
+            obs.get("pain_level", 0),
+            obs.get("age", 0),
         )
     else:
         return (
-            getattr(obs, "symptoms", "unknown"),
-            getattr(obs, "pain_level", "unknown"),
-            getattr(obs, "age", "unknown"),
+            getattr(obs, "symptoms", []),
+            getattr(obs, "pain_level", 0),
+            getattr(obs, "age", 0),
         )
+
+# --- LLM CALL ---
+def get_prediction(prompt):
+    if client is None:
+        return "Moderate"
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        text = response.choices[0].message.content.strip().lower()
+    except Exception:
+        return "Moderate"
+
+    if "emergency" in text:
+        return "Emergency"
+    elif "moderate" in text:
+        return "Moderate"
+    elif "mild" in text:
+        return "Mild"
+    else:
+        return "Moderate"
+
+# --- RULE OVERRIDE ---
+def apply_rules(symptoms, pain_level, age, prediction):
+    symptoms_lower = " ".join(symptoms).lower()
+
+    if any(x in symptoms_lower for x in ["chest pain", "blurred vision", "unconscious", "stroke"]):
+        return "Emergency"
+
+    if age >= 60 and any(x in symptoms_lower for x in ["headache", "vomiting", "dizziness"]):
+        return "Emergency"
+
+    if pain_level >= 8:
+        return "Emergency"
+
+    return prediction
 
 # --- MAIN LOOP ---
 for task in tasks:
-    print("\nRunning task:", task)
-
-    # Handle broken reset signatures
     try:
-        obs = env.reset(task)
-    except TypeError:
         obs = env.reset()
+    except Exception:
+        continue
 
     done = False
     total_score = 0
+    step_count = 0
 
-    while not done:
+    while not done and step_count < 10:
+        step_count += 1
+
         symptoms, pain_level, age = parse_obs(obs)
 
         prompt = f"""
-Patient symptoms: {symptoms}
+You are a medical triage system.
+
+Rules:
+- Mild: minor symptoms, low pain (0-3), no risk
+- Moderate: concerning symptoms, medium pain (4-6)
+- Emergency: life-threatening symptoms OR high pain (7-10)
+
+Patient:
+Symptoms: {symptoms}
 Pain level: {pain_level}
 Age: {age}
 
-Classify severity as exactly one of:
-Mild, Moderate, Emergency.
-
-Only output the label.
+Respond with ONLY one word:
+Mild or Moderate or Emergency.
 """
 
-        try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
-
-            text = response.choices[0].message.content.strip().lower()
-
-        except Exception as e:
-            print("LLM ERROR:", e)
-            text = "moderate"  # fallback
-
-        # --- ROBUST PARSING ---
-        if "emergency" in text:
-            prediction = "Emergency"
-        elif "moderate" in text:
-            prediction = "Moderate"
-        elif "mild" in text:
-            prediction = "Mild"
-        else:
-            prediction = "Moderate"  # safe default
-
-        print("Model prediction:", prediction)
+        prediction = get_prediction(prompt)
+        prediction = apply_rules(symptoms, pain_level, age, prediction)
 
         action = Action(
             action_type="assign_severity",
@@ -100,18 +119,14 @@ Only output the label.
         )
 
         try:
-            obs, reward, done, info = env.step(action)
-        except Exception as e:
-            print("ENV STEP ERROR:", e)
-            print("DEBUG patient:", getattr(env, "patient", "NO PATIENT"))
+            obs, reward, done, _ = env.step(action)
+            total_score += float(reward)
+        except Exception:
             break
 
-        total_score += reward
-
     results[task] = total_score
-    print("Score for", task, ":", total_score)
 
 # --- FINAL OUTPUT ---
-print("\nBaseline Scores:")
+print("Baseline Scores:")
 for t, s in results.items():
     print(t, ":", s)

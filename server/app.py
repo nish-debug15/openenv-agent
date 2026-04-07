@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from server.medical_triage_env_environment import MedicalTriageEnv
+from server.models import Action
 import uvicorn
 
 app = FastAPI()
@@ -7,21 +8,30 @@ env = MedicalTriageEnv()
 
 @app.get("/reset")
 def reset_get():
-    obs = env.reset("easy")
+    obs = env.reset()
     return obs.dict()
 
 @app.post("/reset")
 def reset_post():
-    obs = env.reset("easy")
+    obs = env.reset()
     return obs.dict()
 
 @app.get("/state")
 def state():
-    return env.state().dict()
+    return env.state()
 
 @app.post("/step")
 def step(action: dict):
-    obs, reward, done, info = env.step(action)
+    try:
+        action_obj = Action(**action)
+    except Exception:
+        return {"error": "Invalid action format"}
+
+    try:
+        obs, reward, done, info = env.step(action_obj)
+    except Exception as e:
+        return {"error": str(e)}
+
     return {
         "observation": obs.dict(),
         "reward": reward,

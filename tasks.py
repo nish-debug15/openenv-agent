@@ -21,6 +21,6 @@ def hard_task():
         "symptoms": ["headache", "blurred vision"],
         "pain_level": 5,
         "age": 65,
-        "correct_severity": "Emergency"
+        "true_severity": "Emergency"
     }
     
