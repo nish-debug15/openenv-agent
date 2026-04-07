@@ -3,85 +3,70 @@ from openai import OpenAI
 from server.medical_triage_env_environment import MedicalTriageEnv
 from server.models import Action
 
-# --- ENV VARIABLES ---
+# --- ENV ---
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-# --- CLIENT INIT ---
+# --- CLIENT ---
 try:
-    client = OpenAI(
-        base_url=API_BASE_URL,
-        api_key=API_KEY
-    )
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 except Exception:
     client = None
 
-# --- INIT ENV ---
 env = MedicalTriageEnv()
-
 tasks = ["easy", "medium", "hard"]
-results = {}
 
-# --- OBS PARSER ---
+# --- HELPERS ---
 def parse_obs(obs):
     if isinstance(obs, dict):
-        return (
-            obs.get("symptoms", []),
-            obs.get("pain_level", 0),
-            obs.get("age", 0),
-        )
-    else:
-        return (
-            getattr(obs, "symptoms", []),
-            getattr(obs, "pain_level", 0),
-            getattr(obs, "age", 0),
-        )
+        return obs.get("symptoms", []), obs.get("pain_level", 0), obs.get("age", 0)
+    return getattr(obs, "symptoms", []), getattr(obs, "pain_level", 0), getattr(obs, "age", 0)
 
-# --- LLM CALL ---
 def get_prediction(prompt):
     if client is None:
         return "Moderate"
-
     try:
-        response = client.chat.completions.create(
+        r = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        text = response.choices[0].message.content.strip().lower()
+        t = r.choices[0].message.content.lower()
     except Exception:
         return "Moderate"
 
-    if "emergency" in text:
+    if "emergency" in t:
         return "Emergency"
-    elif "moderate" in text:
+    if "moderate" in t:
         return "Moderate"
-    elif "mild" in text:
+    if "mild" in t:
         return "Mild"
-    else:
-        return "Moderate"
+    return "Moderate"
 
-# --- RULE OVERRIDE ---
-def apply_rules(symptoms, pain_level, age, prediction):
-    symptoms_lower = " ".join(symptoms).lower()
+def apply_rules(symptoms, pain_level, age, pred):
+    s = " ".join(symptoms).lower()
 
-    if any(x in symptoms_lower for x in ["chest pain", "blurred vision", "unconscious", "stroke"]):
+    if any(x in s for x in ["chest pain", "blurred vision", "stroke"]):
         return "Emergency"
 
-    if age >= 60 and any(x in symptoms_lower for x in ["headache", "vomiting", "dizziness"]):
+    if age >= 60 and any(x in s for x in ["headache", "vomiting", "dizziness"]):
         return "Emergency"
 
     if pain_level >= 8:
         return "Emergency"
 
-    return prediction
+    return pred
 
-# --- MAIN LOOP ---
+# --- MAIN ---
 for task in tasks:
+
+    print(f"[START] task={task}", flush=True)
+
     try:
         obs = env.reset()
     except Exception:
+        print(f"[END] task={task} score=0 steps=0", flush=True)
         continue
 
     done = False
@@ -97,36 +82,29 @@ for task in tasks:
 You are a medical triage system.
 
 Rules:
-- Mild: minor symptoms, low pain (0-3), no risk
-- Moderate: concerning symptoms, medium pain (4-6)
-- Emergency: life-threatening symptoms OR high pain (7-10)
+- Mild: pain 0-3
+- Moderate: pain 4-6
+- Emergency: pain 7-10 OR critical symptoms
 
-Patient:
 Symptoms: {symptoms}
-Pain level: {pain_level}
+Pain: {pain_level}
 Age: {age}
 
-Respond with ONLY one word:
-Mild or Moderate or Emergency.
+Answer ONLY one word: Mild / Moderate / Emergency
 """
 
-        prediction = get_prediction(prompt)
-        prediction = apply_rules(symptoms, pain_level, age, prediction)
+        pred = get_prediction(prompt)
+        pred = apply_rules(symptoms, pain_level, age, pred)
 
-        action = Action(
-            action_type="assign_severity",
-            content=prediction
-        )
+        action = Action(action_type="assign_severity", content=pred)
 
         try:
             obs, reward, done, _ = env.step(action)
             total_score += float(reward)
+
+            print(f"[STEP] step={step_count} reward={reward}", flush=True)
+
         except Exception:
             break
 
-    results[task] = total_score
-
-# --- FINAL OUTPUT ---
-print("Baseline Scores:")
-for t, s in results.items():
-    print(t, ":", s)
+    print(f"[END] task={task} score={total_score} steps={step_count}", flush=True)

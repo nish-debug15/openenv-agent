@@ -1,13 +1,12 @@
-FROM python:3.10
+FROM python:3.10-slim
 
 WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r server/requirements.txt
-
-RUN pip install --no-cache-dir openai
+RUN pip install --no-cache-dir openai uvicorn fastapi
 
 ENV PORT=7860
 
