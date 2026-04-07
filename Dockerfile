@@ -1,14 +1,13 @@
-FROM public.ecr.aws/huggingface/transformers-pytorch-cpu:latest
+FROM python:3.10
 
 WORKDIR /app
 
 COPY . .
 
 RUN pip install --upgrade pip
-RUN pip install fastapi uvicorn openai
+RUN pip install --no-cache-dir fastapi uvicorn openai
 
-# optional deps
-RUN pip install -r server/requirements.txt || true
+RUN pip install --no-cache-dir -r server/requirements.txt || true
 
 ENV PORT=7860
 
