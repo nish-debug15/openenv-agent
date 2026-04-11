@@ -19,7 +19,6 @@ API_KEY      = os.environ.get("API_KEY")
 if not API_KEY:
     raise ValueError("API_KEY environment variable is required")
 
-# Client uses injected API_BASE_URL — goes through their LiteLLM proxy
 client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 _SYSTEM = (
@@ -34,7 +33,7 @@ def safe_reward(value: Any) -> float:
         v = float(value)
     except (TypeError, ValueError):
         return 0.05
-    return max(0.03, min(0.97, v))
+    return max(0.04, min(0.96, v))
 
 
 def parse_obs(obs: Any) -> tuple[list, int, int, list]:
@@ -68,10 +67,6 @@ def unpack_step(result: Any) -> tuple[Any, float, bool]:
 
 
 def ask_llm(prompt: str) -> str | None:
-    """
-    Always call LLM through injected proxy (required by hackathon).
-    Returns extracted text on success, None on failure.
-    """
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
@@ -210,14 +205,13 @@ for task_idx, task_name in enumerate(task_names):
 
             symptoms, pain_level, age, hidden_info = parse_obs(obs)
 
-            # ALWAYS call LLM first (hackathon requires proxy calls)
+            # Always call LLM (proxy requirement)
             llm_text = ask_llm(build_prompt(symptoms, pain_level, age, hidden_info))
             llm_pred = extract_severity(llm_text) if llm_text else None
 
-            # Rule-based as override/fallback
+            # Rule overrides LLM, LLM fallback, else Moderate
             rule_result = rule_based_triage(symptoms, pain_level, age, hidden_info, step_count)
 
-            # Priority: rule override > LLM > default Moderate
             if rule_result is not None:
                 decision = rule_result
             elif llm_pred is not None:
