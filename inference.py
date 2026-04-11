@@ -42,14 +42,12 @@ def get_prediction(reasoning):
 Based on this medical reasoning:
 "{reasoning}"
 
-Answer ONLY one word: Mild / Moderate / Emergency / MORE_INFO
+Answer ONLY one word: Mild / Moderate / Emergency
 """
     t = ask_llm(decision_prompt)
     t_clean = re.sub(r'[^\w\s]', '', t).lower()
     t_words = set(t_clean.split())
 
-    if "more_info" in t.lower() or "more info" in t.lower():
-        return "MORE_INFO"
     if "emergency" in t_words:
         return "Emergency"
     if "moderate" in t_words:
@@ -63,38 +61,39 @@ def apply_rules(symptoms, pain_level, age, hidden_info, pred):
     h = " ".join(hidden_info).lower()
 
     # === EMERGENCY RULES ===
-    # Pediatric breathing emergency
     if age < 18 and any(x in s for x in ["wheez", "breath", "chest tight"]):
         return "Emergency"
-    # Elderly confusion/fatigue = possible sepsis
     if age >= 70 and any(x in s for x in ["confusion", "fatigue", "slurred"]):
         return "Emergency"
-    # Hard clinical red flags
     if any(x in s for x in ["fruity breath", "slurred speech", "facial droop", "rebound tenderness"]):
         return "Emergency"
-    # Hidden info red flags
     if any(x in h for x in ["rebound tenderness", "st elevation", "oxygen saturation", "blood pressure is drop", "blood glucose"]):
         return "Emergency"
-    # High pain
     if pain_level >= 8:
         return "Emergency"
-    # Pelvic pain in young female (ectopic)
     if "pelvic pain" in s and age < 40:
         return "Emergency"
 
     # === REQUEST MORE INFO ===
-    # Ambiguous abdominal pain in young adult with no clear cause — could be appendicitis
     if any(x in s for x in ["abdominal pain", "diffuse abdominal"]) and pain_level <= 7 and age < 40 and not hidden_info:
         return "MORE_INFO"
 
-    # === MILD RULES (override LLM Moderate on obvious cases) ===
-    # Minor wound
+    # === FORCE MODERATE (prevent LLM over-triaging) ===
+    # Sprained ankle — never emergency
+    if any(x in s for x in ["ankle swelling", "sprain"]) and pain_level < 8:
+        return "Moderate"
+    # Gastroenteritis — never emergency unless severe
+    if any(x in s for x in ["diarrhea", "stomach cramps"]) and pain_level < 8 and "blood in stool" not in h and "dehydration" not in h:
+        return "Moderate"
+    # Panic attack — palpitations + anxiety = Moderate not Emergency
+    if any(x in s for x in ["palpitations", "tingling", "panic", "anxiety"]) and pain_level < 7:
+        return "Moderate"
+
+    # === MILD RULES ===
     if any(x in s for x in ["small cut", "laceration", "bleeding stopped"]) and pain_level <= 3:
         return "Mild"
-    # Minor sunburn
     if any(x in s for x in ["sunburn", "red skin", "warm to touch"]) and pain_level <= 4 and "blister" not in h:
         return "Mild"
-    # Simple cold/viral in non-distressed patient
     if any(x in s for x in ["runny nose", "sore throat", "mild cough"]) and pain_level <= 3 and age < 18:
         return "Mild"
 
@@ -147,6 +146,8 @@ Write your reasoning.
                 error_msg = str(e).replace('\n', ' ')
                 done = True
 
+            # FIX: clamp to 0.01 min so .2f never prints 0.00
+            reward_val = max(0.01, min(0.999, reward_val))
             rewards_list.append(f"{reward_val:.2f}")
             done_str = "true" if done else "false"
             print(f"[STEP] step={step_count} action={action_str} reward={reward_val:.2f} done={done_str} error={error_msg}", flush=True)
