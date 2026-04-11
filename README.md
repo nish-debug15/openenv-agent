@@ -117,18 +117,16 @@ openenv-agent/
 │   ├── app.py
 │   ├── medical_triage_env_environment.py
 │   ├── models.py
-│   ├── requirements.txt
 │   └── __init__.py
-│
 ├── Dockerfile
 ├── inference.py
 ├── tasks.py
-├── models.py
 ├── client.py
 ├── graders.py
 ├── openenv.yaml
 ├── pyproject.toml
-├── README.md
+├── requirements.txt
+└── README.md
 ```
 ---
 
