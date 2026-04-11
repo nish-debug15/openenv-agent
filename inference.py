@@ -148,7 +148,7 @@ Write your reasoning.
 
             # FIX: clamp to 0.01 min so .2f never prints 0.00
             reward_val = max(0.01, min(0.999, reward_val))
-            rewards_list.append(f"{reward_val:.2f}")
+            rewards_list.append(f"{reward_val:.2f}")  
             done_str = "true" if done else "false"
             print(f"[STEP] step={step_count} action={action_str} reward={reward_val:.2f} done={done_str} error={error_msg}", flush=True)
 
