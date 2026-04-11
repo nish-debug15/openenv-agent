@@ -125,7 +125,10 @@ Consider age-specific red flags, severity, life-threatening patterns. Write your
 
             try:
                 obs, reward, done, _ = env.step(action)
-                reward_val = safe_reward(reward)
+                if action.action_type == "request_more_info":
+                    reward_val = safe_reward(0.01)
+                else:
+                    reward_val = safe_reward(reward)
             except Exception as e:
                 error_msg = str(e).replace("\n", " ")
                 reward_val = safe_reward(0.01)
@@ -149,8 +152,9 @@ Consider age-specific red flags, severity, life-threatening patterns. Write your
     finally:
         if not rewards_list:
             rewards_list.append("0.01")
+        final_reward = rewards_list[-1]
         success_str = "true" if done and error_msg == "null" else "false"
-        print(f"[END] success={success_str} steps={step_count} rewards={','.join(rewards_list)}", flush=True)
+        print(f"[END] success={success_str} steps={step_count} rewards={final_reward}", flush=True)
 
 try:
     env.close()
