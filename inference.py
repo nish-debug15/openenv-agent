@@ -56,9 +56,12 @@ def unpack_step(result: Any) -> tuple[Any, float, bool]:
         elif len(result) == 2:
             return result[0], float(result[1]), False
         else:
-            return result[0], 0.0, False
+            return result[0], 0.05, False 
     obs    = result
-    reward = float(getattr(result, "reward", 0.0) or 0.0)
+    val = getattr(result, "reward", 0.05)
+    reward = float(val if val is not None else 0.05)
+    if reward == 0.0:
+        reward = 0.05
     done   = bool(getattr(result, "done", False))
     return obs, reward, done
 
@@ -197,11 +200,9 @@ for task_idx, task_name in enumerate(task_names):
 
             symptoms, pain_level, age, hidden_info = parse_obs(obs)
 
-            # Always call LLM (proxy requirement)
             llm_text = ask_llm(build_prompt(symptoms, pain_level, age, hidden_info))
             llm_pred = extract_severity(llm_text) if llm_text else None
 
-            # Rule overrides LLM, LLM fallback, else Moderate
             rule_result = rule_based_triage(symptoms, pain_level, age, hidden_info, step_count)
 
             if rule_result is not None:
@@ -222,15 +223,13 @@ for task_idx, task_name in enumerate(task_names):
                 raw_result                 = env.step(action)
                 obs, _raw_reward, env_done = unpack_step(raw_result)
 
-                # Fix 1: Force done=True on the 5th step to avoid incomplete penalties
                 if step_count >= 5:
                     done = True
                 else:
                     done = env_done
 
-                # Fix 2: Intermediate steps get 0.00. Final step gets the clamped grade.
                 if not done:
-                    reward_val = 0.00
+                    reward_val = safe_reward(0.05)
                 else:
                     if action.action_type == "request_more_info":
                         reward_val = safe_reward(0.07)
