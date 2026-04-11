@@ -152,9 +152,8 @@ Consider age-specific red flags, severity, life-threatening patterns. Write your
     finally:
         if not rewards_list:
             rewards_list.append("0.01")
-        final_reward = rewards_list[-1]
         success_str = "true" if done and error_msg == "null" else "false"
-        print(f"[END] success={success_str} steps={step_count} rewards={final_reward}", flush=True)
+        print(f"[END] success={success_str} steps={step_count} rewards={','.join(rewards_list)}", flush=True)
 
 try:
     env.close()

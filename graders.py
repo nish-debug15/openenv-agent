@@ -1,4 +1,5 @@
 def grade(predicted_severity, true_severity, steps):
+    steps = max(steps, 1)
     score = 0.0
     if predicted_severity == true_severity:
         score += 0.7
