@@ -61,24 +61,24 @@ def apply_rules(symptoms, pain_level, age, pred):
 # --- MAIN ---
 for task in tasks:
 
-    print(f"[START] task={task}", flush=True)
+    print(f"[START] task={task} env=medical_triage_env model={MODEL_NAME}", flush=True)
+
+    done = False
+    step_count = 0
+    rewards_list = []
+    error_msg = "null"
 
     try:
         obs = env.reset()
-    except Exception:
-        print(f"[END] task={task} score=0 steps=0", flush=True)
-        continue
 
-    done = False
-    total_score = 0
-    step_count = 0
+        while not done and step_count < 10:
+            step_count += 1
+            error_msg = "null"
+            reward_val = 0.0
 
-    while not done and step_count < 10:
-        step_count += 1
+            symptoms, pain_level, age = parse_obs(obs)
 
-        symptoms, pain_level, age = parse_obs(obs)
-
-        prompt = f"""
+            prompt = f"""\
 You are a medical triage system.
 
 Rules:
@@ -93,18 +93,34 @@ Age: {age}
 Answer ONLY one word: Mild / Moderate / Emergency
 """
 
-        pred = get_prediction(prompt)
-        pred = apply_rules(symptoms, pain_level, age, pred)
+            pred = get_prediction(prompt)
+            pred = apply_rules(symptoms, pain_level, age, pred)
 
-        action = Action(action_type="assign_severity", content=pred)
+            action = Action(action_type="assign_severity", content=pred)
+            action_str = pred
 
+            try:
+                obs, reward, done, _ = env.step(action)
+                reward_val = float(reward)
+            except Exception as e:
+                error_msg = str(e).replace('\n', ' ')
+                done = True
+
+            rewards_list.append(f"{reward_val:.2f}")
+            done_str = "true" if done else "false"
+            print(f"[STEP] step={step_count} action={action_str} reward={reward_val:.2f} done={done_str} error={error_msg}", flush=True)
+
+            if error_msg != "null":
+                break
+
+    except Exception as e:
+        pass
+
+    finally:
         try:
-            obs, reward, done, _ = env.step(action)
-            total_score += float(reward)
-
-            print(f"[STEP] step={step_count} reward={reward}", flush=True)
-
+            env.close()
         except Exception:
-            break
-
-    print(f"[END] task={task} score={total_score} steps={step_count}", flush=True)
+            pass
+        success_str = "true" if done and error_msg == "null" else "false"
+        rewards_str = ",".join(rewards_list)
+        print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}", flush=True)
