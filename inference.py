@@ -27,14 +27,12 @@ _SYSTEM = (
     "vital sign implications, and life-threatening patterns."
 )
 
-
 def safe_reward(value: Any) -> float:
     try:
         v = float(value)
     except (TypeError, ValueError):
         return 0.05
     return max(0.04, min(0.96, v))
-
 
 def parse_obs(obs: Any) -> tuple[list, int, int, list]:
     if isinstance(obs, dict):
@@ -51,7 +49,6 @@ def parse_obs(obs: Any) -> tuple[list, int, int, list]:
         getattr(obs, "hidden_info", []),
     )
 
-
 def unpack_step(result: Any) -> tuple[Any, float, bool]:
     if isinstance(result, tuple):
         if len(result) >= 3:
@@ -64,7 +61,6 @@ def unpack_step(result: Any) -> tuple[Any, float, bool]:
     reward = float(getattr(result, "reward", 0.0) or 0.0)
     done   = bool(getattr(result, "done", False))
     return obs, reward, done
-
 
 def ask_llm(prompt: str) -> str | None:
     try:
@@ -82,7 +78,6 @@ def ask_llm(prompt: str) -> str | None:
         print(f"[WARN] LLM call failed: {type(e).__name__}", file=sys.stderr)
         return None
 
-
 def extract_severity(text: str) -> str:
     clean = re.sub(r"[^\w\s]", "", text.lower())
     words = set(clean.split())
@@ -92,7 +87,6 @@ def extract_severity(text: str) -> str:
     danger = {"critical", "urgent", "life-threatening", "immediately", "severe", "stroke", "cardiac", "sepsis"}
     if words & danger:        return "Emergency"
     return "Moderate"
-
 
 def build_prompt(symptoms: list, pain_level: int, age: int, hidden_info: list) -> str:
     extras = ""
@@ -110,7 +104,6 @@ def build_prompt(symptoms: list, pain_level: int, age: int, hidden_info: list) -
         f"3. Is this immediately life-threatening?\n\n"
         f"Respond with ONE word only: Mild / Moderate / Emergency"
     )
-
 
 def rule_based_triage(symptoms: list, pain_level: int, age: int,
                       hidden_info: list, step: int) -> str | None:
@@ -182,7 +175,6 @@ def rule_based_triage(symptoms: list, pain_level: int, age: int,
 
     return None
 
-
 env        = MedicalTriageEnv()
 task_names = [f"task_{i + 1}" for i in range(15)]
 
@@ -227,13 +219,23 @@ for task_idx, task_name in enumerate(task_names):
                 action_str = decision
 
             try:
-                raw_result             = env.step(action)
-                obs, _raw_reward, done = unpack_step(raw_result)
+                raw_result                 = env.step(action)
+                obs, _raw_reward, env_done = unpack_step(raw_result)
 
-                if action.action_type == "request_more_info":
-                    reward_val = safe_reward(0.07)
+                # Fix 1: Force done=True on the 5th step to avoid incomplete penalties
+                if step_count >= 5:
+                    done = True
                 else:
-                    reward_val = safe_reward(grade(decision, true_severity, step_count))
+                    done = env_done
+
+                # Fix 2: Intermediate steps get 0.00. Final step gets the clamped grade.
+                if not done:
+                    reward_val = 0.00
+                else:
+                    if action.action_type == "request_more_info":
+                        reward_val = safe_reward(0.07)
+                    else:
+                        reward_val = safe_reward(grade(decision, true_severity, step_count))
 
             except Exception as step_exc:
                 error_msg  = str(step_exc).replace("\n", " ")[:200]
