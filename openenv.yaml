@@ -8,6 +8,18 @@ action_model: models.Action
 reward_model: models.Reward
 
 tasks:
-  - tasks.easy_task
-  - tasks.medium_task
-  - tasks.hard_task
+  - tasks.task_1
+  - tasks.task_2
+  - tasks.task_3
+  - tasks.task_4
+  - tasks.task_5
+  - tasks.task_6
+  - tasks.task_7
+  - tasks.task_8
+  - tasks.task_9
+  - tasks.task_10
+  - tasks.task_11
+  - tasks.task_12
+  - tasks.task_13
+  - tasks.task_14
+  - tasks.task_15

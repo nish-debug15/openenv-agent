@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # What agent sees
 class Observation(BaseModel):
@@ -7,6 +7,7 @@ class Observation(BaseModel):
     pain_level: int
     age: int
     step: int
+    hidden_info: Optional[List[str]] = []
 
 # What agent does
 class Action(BaseModel):
