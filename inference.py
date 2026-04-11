@@ -1,29 +1,30 @@
 import os
+import re
 from openai import OpenAI
 from server.medical_triage_env_environment import MedicalTriageEnv
 from server.models import Action
 
-# --- ENV ---
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-30B-A3B")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-# --- CLIENT ---
+if not API_KEY:
+    raise ValueError("HF_TOKEN environment variable is required")
+
 try:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 except Exception:
     client = None
 
 env = MedicalTriageEnv()
-tasks = ["easy", "medium", "hard"]
+tasks = [f"task_{i+1}" for i in range(15)]
 
-# --- HELPERS ---
 def parse_obs(obs):
     if isinstance(obs, dict):
-        return obs.get("symptoms", []), obs.get("pain_level", 0), obs.get("age", 0)
-    return getattr(obs, "symptoms", []), getattr(obs, "pain_level", 0), getattr(obs, "age", 0)
+        return obs.get("symptoms", []), obs.get("pain_level", 0), obs.get("age", 0), obs.get("hidden_info", [])
+    return getattr(obs, "symptoms", []), getattr(obs, "pain_level", 0), getattr(obs, "age", 0), getattr(obs, "hidden_info", [])
 
-def get_prediction(prompt):
+def ask_llm(prompt):
     if client is None:
         return "Moderate"
     try:
@@ -32,35 +33,74 @@ def get_prediction(prompt):
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        t = r.choices[0].message.content.lower()
+        return r.choices[0].message.content
     except Exception:
         return "Moderate"
 
-    if "emergency" in t:
+def get_prediction(reasoning):
+    decision_prompt = f"""\
+Based on this medical reasoning:
+"{reasoning}"
+
+Answer ONLY one word: Mild / Moderate / Emergency / MORE_INFO
+"""
+    t = ask_llm(decision_prompt)
+    t_clean = re.sub(r'[^\w\s]', '', t).lower()
+    t_words = set(t_clean.split())
+
+    if "more_info" in t.lower() or "more info" in t.lower():
+        return "MORE_INFO"
+    if "emergency" in t_words:
         return "Emergency"
-    if "moderate" in t:
+    if "moderate" in t_words:
         return "Moderate"
-    if "mild" in t:
+    if "mild" in t_words:
         return "Mild"
     return "Moderate"
 
-def apply_rules(symptoms, pain_level, age, pred):
+def apply_rules(symptoms, pain_level, age, hidden_info, pred):
     s = " ".join(symptoms).lower()
+    h = " ".join(hidden_info).lower()
 
-    if any(x in s for x in ["chest pain", "blurred vision", "stroke"]):
+    # === EMERGENCY RULES ===
+    # Pediatric breathing emergency
+    if age < 18 and any(x in s for x in ["wheez", "breath", "chest tight"]):
         return "Emergency"
-
-    if age >= 60 and any(x in s for x in ["headache", "vomiting", "dizziness"]):
+    # Elderly confusion/fatigue = possible sepsis
+    if age >= 70 and any(x in s for x in ["confusion", "fatigue", "slurred"]):
         return "Emergency"
-
+    # Hard clinical red flags
+    if any(x in s for x in ["fruity breath", "slurred speech", "facial droop", "rebound tenderness"]):
+        return "Emergency"
+    # Hidden info red flags
+    if any(x in h for x in ["rebound tenderness", "st elevation", "oxygen saturation", "blood pressure is drop", "blood glucose"]):
+        return "Emergency"
+    # High pain
     if pain_level >= 8:
         return "Emergency"
+    # Pelvic pain in young female (ectopic)
+    if "pelvic pain" in s and age < 40:
+        return "Emergency"
+
+    # === REQUEST MORE INFO ===
+    # Ambiguous abdominal pain in young adult with no clear cause — could be appendicitis
+    if any(x in s for x in ["abdominal pain", "diffuse abdominal"]) and pain_level <= 7 and age < 40 and not hidden_info:
+        return "MORE_INFO"
+
+    # === MILD RULES (override LLM Moderate on obvious cases) ===
+    # Minor wound
+    if any(x in s for x in ["small cut", "laceration", "bleeding stopped"]) and pain_level <= 3:
+        return "Mild"
+    # Minor sunburn
+    if any(x in s for x in ["sunburn", "red skin", "warm to touch"]) and pain_level <= 4 and "blister" not in h:
+        return "Mild"
+    # Simple cold/viral in non-distressed patient
+    if any(x in s for x in ["runny nose", "sore throat", "mild cough"]) and pain_level <= 3 and age < 18:
+        return "Mild"
 
     return pred
 
-# --- MAIN ---
 for task in tasks:
-
     print(f"[START] task={task} env=medical_triage_env model={MODEL_NAME}", flush=True)
 
     done = False
@@ -76,28 +116,29 @@ for task in tasks:
             error_msg = "null"
             reward_val = 0.0
 
-            symptoms, pain_level, age = parse_obs(obs)
+            symptoms, pain_level, age, hidden_info = parse_obs(obs)
+            extra_str = f"\nAdditional clinical findings: {', '.join(hidden_info)}" if hidden_info else ""
 
-            prompt = f"""\
-You are a medical triage system.
-
-Rules:
-- Mild: pain 0-3
-- Moderate: pain 4-6
-- Emergency: pain 7-10 OR critical symptoms
+            reasoning_prompt = f"""\
+You are an expert medical triage system. Think step-by-step about this patient.
 
 Symptoms: {symptoms}
-Pain: {pain_level}
-Age: {age}
+Pain: {pain_level}/10
+Age: {age}{extra_str}
 
-Answer ONLY one word: Mild / Moderate / Emergency
+Consider: age-specific red flags, symptom severity, any life-threatening patterns.
+Write your reasoning.
 """
+            reasoning = ask_llm(reasoning_prompt)
+            raw_pred = get_prediction(reasoning)
+            pred = apply_rules(symptoms, pain_level, age, hidden_info, raw_pred)
 
-            pred = get_prediction(prompt)
-            pred = apply_rules(symptoms, pain_level, age, pred)
-
-            action = Action(action_type="assign_severity", content=pred)
-            action_str = pred
+            if pred == "MORE_INFO":
+                action = Action(action_type="request_more_info", content="")
+                action_str = "request_more_info"
+            else:
+                action = Action(action_type="assign_severity", content=pred)
+                action_str = pred
 
             try:
                 obs, reward, done, _ = env.step(action)
@@ -113,7 +154,7 @@ Answer ONLY one word: Mild / Moderate / Emergency
             if error_msg != "null":
                 break
 
-    except Exception as e:
+    except Exception:
         pass
 
     finally:
@@ -122,5 +163,4 @@ Answer ONLY one word: Mild / Moderate / Emergency
         except Exception:
             pass
         success_str = "true" if done and error_msg == "null" else "false"
-        rewards_str = ",".join(rewards_list)
-        print(f"[END] success={success_str} steps={step_count} rewards={rewards_str}", flush=True)
+        print(f"[END] success={success_str} steps={step_count} rewards={','.join(rewards_list)}", flush=True)
