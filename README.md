@@ -158,7 +158,7 @@ This project passes:
 
 ## Team
 
-AI Alchmists
+AI Alchemists
 
 * Nishit Patel (Lead)
 * Pranav Adhikari
