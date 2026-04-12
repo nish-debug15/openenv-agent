@@ -5,9 +5,9 @@ observation_model: models.Observation
 action_model: models.Action
 reward_model: models.Reward
 graders:
-  easy: graders:grade
-  medium: graders:grade
-  hard: graders:grade
+  easy: server.graders:EasyGrader
+  medium: server.graders:MediumGrader
+  hard: server.graders:HardGrader
 tasks:
   - tasks.task_1
   - tasks.task_2
