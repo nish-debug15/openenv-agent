@@ -9,18 +9,33 @@ graders:
   medium: server.graders:MediumGrader
   hard: server.graders:HardGrader
 tasks:
-  - tasks.task_1
-  - tasks.task_2
-  - tasks.task_3
-  - tasks.task_4
-  - tasks.task_5
-  - tasks.task_6
-  - tasks.task_7
-  - tasks.task_8
-  - tasks.task_9
-  - tasks.task_10
-  - tasks.task_11
-  - tasks.task_12
-  - tasks.task_13
-  - tasks.task_14
-  - tasks.task_15
+  - id: tasks.task_1
+    difficulty: easy
+  - id: tasks.task_2
+    difficulty: medium
+  - id: tasks.task_3
+    difficulty: hard
+  - id: tasks.task_4
+    difficulty: easy
+  - id: tasks.task_5
+    difficulty: easy
+  - id: tasks.task_6
+    difficulty: medium
+  - id: tasks.task_7
+    difficulty: medium
+  - id: tasks.task_8
+    difficulty: hard
+  - id: tasks.task_9
+    difficulty: easy
+  - id: tasks.task_10
+    difficulty: hard
+  - id: tasks.task_11
+    difficulty: easy
+  - id: tasks.task_12
+    difficulty: hard
+  - id: tasks.task_13
+    difficulty: medium
+  - id: tasks.task_14
+    difficulty: medium
+  - id: tasks.task_15
+    difficulty: hard
