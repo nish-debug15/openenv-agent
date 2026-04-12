@@ -54,7 +54,7 @@ class MedicalTriageEnv:
                     step=self.steps,
                     hidden_info=self.revealed_info.copy()
                 ),
-                0.0, # graded at the end
+                0.05,
                 False,
                 {},
             )
