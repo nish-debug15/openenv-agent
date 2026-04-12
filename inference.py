@@ -31,8 +31,8 @@ def safe_reward(value: Any) -> float:
     try:
         v = float(value)
     except (TypeError, ValueError):
-        return 0.01
-    return max(0.01, min(0.99, v))
+        return 0.05
+    return max(0.02, min(0.97, v))
 
 def parse_obs(obs: Any) -> tuple[list, int, int, list]:
     if isinstance(obs, dict):
@@ -56,10 +56,10 @@ def unpack_step(result: Any) -> tuple[Any, float, bool]:
         elif len(result) == 2:
             return result[0], float(result[1]), False
         else:
-            return result[0], 0.01, False
+            return result[0], 0.05, False
     obs    = result
-    val    = getattr(result, "reward", 0.01)
-    reward = float(val if val is not None else 0.01)
+    val    = getattr(result, "reward", 0.05)
+    reward = float(val if val is not None else 0.05)
     done   = bool(getattr(result, "done", False))
     return obs, reward, done
 
@@ -227,7 +227,7 @@ for task_idx, task_name in enumerate(task_names):
                     done = env_done
 
                 if not done:
-                    reward_val = safe_reward(0.01)
+                    reward_val = safe_reward(0.05)
                 else:
                     if action.action_type == "request_more_info":
                         reward_val = safe_reward(0.10)
@@ -236,7 +236,7 @@ for task_idx, task_name in enumerate(task_names):
 
             except Exception as step_exc:
                 error_msg  = str(step_exc).replace("\n", " ")[:200]
-                reward_val = safe_reward(0.01)
+                reward_val = safe_reward(0.05)
                 done       = True
 
             rewards_list.append(f"{reward_val:.2f}")
@@ -252,7 +252,7 @@ for task_idx, task_name in enumerate(task_names):
 
     except Exception as ep_exc:
         error_msg  = str(ep_exc).replace("\n", " ")[:200]
-        reward_val = safe_reward(0.01)
+        reward_val = safe_reward(0.05)
         if step_count == 0:
             step_count = 1
         rewards_list.append(f"{reward_val:.2f}")
@@ -265,7 +265,7 @@ for task_idx, task_name in enumerate(task_names):
 
     finally:
         if not rewards_list:
-            rewards_list.append("0.01")
+            rewards_list.append("0.05")
         success_str = "true" if (done and error_msg == "null") else "false"
         print(
             f"[END] success={success_str} steps={step_count} "
