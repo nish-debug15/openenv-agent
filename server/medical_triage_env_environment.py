@@ -62,7 +62,8 @@ class MedicalTriageEnv:
             predicted = action.content
             true = self.patient["true_severity"]
 
-            score = grade(predicted, true, self.steps)
+            result = grade(predicted, true, self.steps)
+            score = result if isinstance(result, float) else float(result.get("score", 0.05))
             done = True
 
             return (
