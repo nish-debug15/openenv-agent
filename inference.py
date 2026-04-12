@@ -188,6 +188,8 @@ for task_idx, task_name in enumerate(task_names):
     rewards_list: list[str] = []
     error_msg    = "null"
     done         = False
+    decision     = "Moderate"
+    final_score  = 0.05
 
     try:
         obs = env.reset()
@@ -233,10 +235,12 @@ for task_idx, task_name in enumerate(task_names):
                         reward_val = safe_reward(0.10)
                     else:
                         reward_val = safe_reward(grade(decision, true_severity, step_count))
+                        final_score = reward_val
 
             except Exception as step_exc:
                 error_msg  = str(step_exc).replace("\n", " ")[:200]
                 reward_val = safe_reward(0.05)
+                final_score = reward_val
                 done       = True
 
             rewards_list.append(f"{reward_val:.2f}")
@@ -253,6 +257,7 @@ for task_idx, task_name in enumerate(task_names):
     except Exception as ep_exc:
         error_msg  = str(ep_exc).replace("\n", " ")[:200]
         reward_val = safe_reward(0.05)
+        final_score = reward_val
         if step_count == 0:
             step_count = 1
         rewards_list.append(f"{reward_val:.2f}")
@@ -269,6 +274,7 @@ for task_idx, task_name in enumerate(task_names):
         success_str = "true" if (done and error_msg == "null") else "false"
         print(
             f"[END] success={success_str} steps={step_count} "
+            f"score={final_score:.4f} "
             f"rewards={','.join(rewards_list)}",
             flush=True,
         )
