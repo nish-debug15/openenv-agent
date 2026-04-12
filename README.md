@@ -9,95 +9,124 @@ pinned: false
 
 # Medical Triage OpenEnv
 
-An OpenEnv-compatible reinforcement learning environment for **medical triage classification** using Large Language Models.
+An OpenEnv-compatible reinforcement learning environment for **medical triage classification** — where an LLM agent must assess patient severity under uncertainty, request clinical information strategically, and make time-critical decisions.
 
-The system simulates patient scenarios and evaluates an agent's ability to classify severity into:
-
-* **Mild**
-* **Moderate**
-* **Emergency**
+Built for the **Meta × OpenEnv × Hugging Face SST Hackathon**.
 
 ---
 
-## Overview
+## Why This Environment?
 
-This project implements a triage environment where:
+Medical triage is one of the most consequential sequential decision-making tasks in the real world. Every minute of delay in identifying an emergency costs lives. This environment models that pressure:
 
-* The **environment generates patient cases** (symptoms, age, pain level)
-* The **agent (LLM)** predicts severity using multi-step reasoning
-* The **environment assigns rewards** based on correctness and efficiency
+- The agent receives **incomplete patient information** and must decide: act now or gather more data?
+- **Wrong severity classification is penalized** — calling a stroke "mild" matters
+- **Efficiency is rewarded** — correct diagnosis in fewer steps scores higher
+- The environment is designed to be genuinely useful for **training and evaluating LLM-based clinical agents**
 
 ---
 
 ## System Architecture
 
-```text
+```
 Client → FastAPI Server → MedicalTriageEnv → LLM Agent → Action → Reward
 ```
 
-### Flow:
+### Episode Flow
 
-1. `/reset` → returns patient observation (symptoms, age, pain level)
-2. Agent reasons about severity; may request more info if ambiguous
-3. `/step` → evaluates prediction or reveals hidden clinical info
-4. Reward returned based on correctness + steps taken
-
----
-
-## Decision Logic
-
-The agent uses a two-stage approach:
-
-1. **LLM reasoning** — structured prompt with symptoms, pain, age → chain-of-thought → severity prediction
-2. **Rule-based safety layer** — hard overrides for critical patterns:
-   - Pediatric breathing issues → Emergency
-   - Elderly confusion/fatigue → Emergency (sepsis risk)
-   - Fruity breath → Emergency (DKA)
-   - Slurred speech / facial droop → Emergency (stroke)
-   - Ambiguous abdominal pain → `request_more_info`
-
-Agent returns one of:
-
-```text
-Mild / Moderate / Emergency / request_more_info
-```
+1. `/reset` → returns initial patient observation: symptoms, age, pain level
+2. Agent reasons about severity — may request hidden clinical info if ambiguous
+3. `/step` → evaluates the action: reveals more info OR scores the severity prediction
+4. Reward returned based on correctness + diagnostic efficiency
 
 ---
 
-## Reward Function
+## Agent Design: Two-Stage Decision Pipeline
 
-```python
-def grade(predicted_severity, true_severity, steps):
-    score = 0.0
-    if predicted_severity == true_severity:
-        score += 0.7          
-    score += max(0, 0.3 - 0.05 * steps)  
-    return min(score, 1.0)
-```
+The agent combines LLM reasoning with a deterministic safety layer — neither alone is sufficient.
 
-| Outcome | Max Reward |
-|--------|------------|
-| Correct, 1 step | 0.75 |
-| Correct, 2 steps | 0.70 |
-| Incorrect | 0.00–0.25 |
+### Stage 1 — LLM Chain-of-Thought
+Structured prompt feeds symptoms, pain score, age, and any revealed clinical findings into `Qwen3-30B-A3B` at `temperature=0`. The model produces step-by-step medical reasoning before committing to a severity prediction.
+
+### Stage 2 — Rule-Based Safety Override
+Critical patterns are caught deterministically, regardless of LLM output:
+
+| Pattern | Override | Clinical Rationale |
+|---|---|---|
+| Pediatric + breathing symptoms | → Emergency | Pediatric airways decompensate fast |
+| Age 70+ + confusion/fatigue | → Emergency | Sepsis presentation in elderly |
+| Fruity breath | → Emergency | Diabetic ketoacidosis (DKA) |
+| Slurred speech / facial droop | → Emergency | Stroke — time-to-treatment critical |
+| Rebound tenderness (hidden) | → Emergency | Peritonitis / surgical abdomen |
+| ST elevation (hidden) | → Emergency | STEMI — minutes matter |
+| Ambiguous abdominal pain, no hidden info | → `request_more_info` | Rule out ectopic, appendicitis |
+
+This two-stage design reflects real clinical practice: experienced clinicians use heuristics for high-acuity patterns and deliberate reasoning for ambiguous presentations.
+
+---
+
+## The `request_more_info` Mechanic
+
+A key design decision: the agent is **not forced to commit on incomplete information**.
+
+When clinical presentation is ambiguous, the agent can issue `request_more_info` — triggering the environment to reveal hidden clinical findings (lab values, vitals, secondary symptoms). This models the real triage workflow where a nurse asks follow-up questions before routing a patient.
+
+This makes the environment genuinely **multi-step** and forces the agent to balance information gain against time cost.
+
+---
+
+## Reward Design
+
+Graders are difficulty-tiered (Easy / Medium / Hard) and score across four dimensions:
+
+| Component | What it measures |
+|---|---|
+| `CORRECT_SEVERITY` | Did the agent classify the right tier? |
+| `CORRECT_SERVICE` | Appropriate care pathway (emergency vs urgent vs GP)? |
+| `CORRECT_PATTERN` | Did the agent recognize the clinical pattern? |
+| `TIME_BONUS_FAST` | Bonus for correct diagnosis in a single step |
+
+**Score ranges — all strictly in (0, 1):**
+
+| Outcome | Easy | Medium | Hard |
+|---|---|---|---|
+| Correct, 1 step | ~0.90 | ~0.85 | ~0.77 |
+| Correct, 2+ steps | ~0.85 | ~0.80 | ~0.72 |
+| Off by one tier | 0.30 | 0.25 | 0.20 |
+| Wrong / null | 0.05 | 0.05 | 0.05 |
+
+Scores never reach 0 or 1 — boundary values are explicitly excluded to reflect real-world uncertainty in clinical judgment.
+
+---
+
+## Task Difficulty Progression
+
+15 tasks across three difficulty tiers, each requiring progressively more nuanced reasoning:
+
+**Easy** — Clear symptom-severity mapping. Single-step diagnosis expected. Classic presentations (ankle sprain → Mild, chest pain + ST elevation → Emergency).
+
+**Medium** — Ambiguous initial presentation. Hidden info reveal likely needed. Age and comorbidity context matters.
+
+**Hard** — Atypical presentations, misleading initial symptoms, high penalty for missed emergencies. Requires correct identification of rare but critical patterns (DKA, sepsis in elderly, ectopic pregnancy).
 
 ---
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/reset` | POST | Initialize environment, returns patient observation |
-| `/step`  | POST | Submit action (assign_severity or request_more_info) |
-| `/close` | POST | End episode |
+|---|---|---|
+| `/reset` | POST | Initialize episode, returns patient observation |
+| `/step` | POST | Submit `assign_severity` or `request_more_info` action |
+| `/close` | POST | End episode, finalize scoring |
 
 ---
 
 ## Deployment
 
-* Fully Dockerized
-* Deployed on Hugging Face Spaces
-* Runs FastAPI server on port `7860`
+- Fully Dockerized — runs anywhere
+- Deployed on Hugging Face Spaces (Docker SDK)
+- FastAPI server on port `7860`
+- Passes all OpenEnv Phase 1 + Phase 2 validation checks
 
 ---
 
@@ -106,7 +135,6 @@ def grade(predicted_severity, true_severity, steps):
 ```bash
 git clone https://github.com/nish-debug15/openenv-agent.git
 cd openenv-agent
-
 pip install -r requirements.txt
 python -m server.app
 ```
@@ -115,54 +143,51 @@ python -m server.app
 
 ## Inference
 
-The agent uses an LLM via Hugging Face router:
-
-* Model: `Qwen/Qwen3-30B-A3B` (via Hugging Face router)
-* Temperature: 0 (deterministic)
-* Multi-step: requests additional clinical info for ambiguous cases
-
----
-
-## Project Structure
-
-```text
-openenv-agent/
-├── server/
-│   ├── app.py
-│   ├── medical_triage_env_environment.py
-│   ├── models.py
-│   └── __init__.py
-├── Dockerfile
-├── inference.py
-├── tasks.py
-├── client.py
-├── graders.py
-├── openenv.yaml
-├── pyproject.toml
-├── requirements.txt
-└── README.md
+```
+Model:       Qwen/Qwen3-30B-A3B (via Hugging Face router)
+Temperature: 0  (deterministic, reproducible evaluation)
+Max steps:   10 per episode
+Fallback:    Rule-based override catches all critical safety patterns
 ```
 
 ---
 
 ## Validation
 
-This project passes:
-
-* OpenEnv Phase 1 validation (structural checks)
-* Docker build checks
-* API endpoint checks
-* 15/15 tasks scored correctly in Phase 2
+- OpenEnv Phase 1 — structural + spec compliance
+- Docker build + inference execution
+- Output parsing (`[START]` / `[STEP]` / `[END]` format)
+- Task validation — 15/15 tasks scored
+- LLM criteria check
+- Phase 2 — **Submission Validated**
 
 ---
 
-## Team
+## Project Structure
 
-AI Alchemists
+```
+openenv-agent/
+├── server/
+│   ├── app.py                              # FastAPI server
+│   ├── medical_triage_env_environment.py   # Core RL environment
+│   ├── graders.py                          # EasyGrader, MediumGrader, HardGrader
+│   └── models.py                           # Typed observation/action/reward models
+├── Dockerfile
+├── inference.py                            # Agent logic + output formatting
+├── tasks.py                                # 15 triage scenarios
+├── graders.py                              # Internal grade() function
+├── openenv.yaml                            # OpenEnv spec config
+├── requirements.txt
+└── README.md
+```
 
-* Nishit Patel (Lead)
-* Pranav Adhikari
-* Rahul Kiran
+---
+
+## Team — AI Alchemists
+
+- **Nishit Patel** (Lead)
+- Pranav Adhikari
+- Rahul Kiran
 
 ---
 
